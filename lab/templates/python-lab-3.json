@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Lab 4 (Python) - Develop Solutions Using Amazon DynamoDB
+Parameters:
+  S3PathPrefix:
+    Type: String
+    Description: 'The path prefix where lab resources are stored'
+    Default: 'courses/ILT-TF-200-DODEVA/v4.0.0/lab-3-python'
+  S3ResourceBucket:
+    Type: String
+    Description: 'S3 Bucket suffix (e.g. us-west-2-tcprod) of where to pull lab resources from'
+    Default: '-tcprod'
+
+Resources:
+  # Network Resources
+  vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/21
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: Lab-vpc
+  pubSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref vpc
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: Lab-Pub-a
+  igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Lab-igw
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref vpc
+      InternetGatewayId: !Ref igw
+  pubRt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: Name
+          Value:  Lab-public-RT
+  pubRtAssocA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref pubSubnetA
+      RouteTableId: !Ref pubRt
+  igwRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref pubRt
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref igw
+  
+  ##Cloud9 Environment with student as the owner and one CodeCommit Repo
+  Cloud9:
+    Type: 'AWS::Cloud9::EnvironmentEC2'
+    DependsOn: igwRoute
+    Properties:
+      InstanceType: t2.micro
+      ImageId: resolve:ssm:/aws/service/cloud9/amis/amazonlinux-2-x86_64
+      SubnetId: !Ref pubSubnetA
+      OwnerArn: !Sub 'arn:aws:iam::${AWS::AccountId}:user/awsstudent'
+      Repositories:
+        - PathComponent: /labRepo
+          RepositoryUrl: !GetAtt labRepo.CloneUrlHttp
+  labRepo:
+    Type: 'AWS::CodeCommit::Repository'
+    Properties:
+      Code:
+        S3:
+          Bucket: !Sub '${AWS::Region}${S3ResourceBucket}'
+          Key: !Sub '${S3PathPrefix}/scripts/labRepo.zip'
+      RepositoryDescription: Repository for Lab3 code solutions
+      RepositoryName: labRepo
+  
+  ReadOnlyGroup:
+    Type: 'AWS::IAM::Group'
+    Properties:
+      GroupName: QLReadOnly
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/ReadOnlyAccess'
+  GroupAssignment:
+    Type: 'AWS::IAM::UserToGroupAddition'
+    DependsOn: ReadOnlyGroup
+    Properties:
+      GroupName: QLReadOnly
+      Users:
+        - awsstudent
+
+Outputs:
+  LabRegion:
+    Description: This is the AWS region that this lab was launched in.
+    Value: !Ref 'AWS::Region'

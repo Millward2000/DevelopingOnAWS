@@ -1,0 +1,324 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Developing on AWS - Lab 4 - Develop Solutions Using AWS Lambda
+
+Parameters:
+  S3PathPrefix:
+    Type: String
+    Description: 'The path prefix where lab resources are stored'
+    Default: 'courses/ILT-TF-200-DODEVA/v4.0.0/lab-4-python'
+  S3ResourceBucket:
+    Type: String
+    Description: 'S3 Bucket suffix (e.g. us-west-2-tcprod) of where to pull lab resources from'
+    Default: '-tcprod'
+
+Resources:
+  # Network Resources
+  vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/21
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: Lab-vpc
+  pubSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      MapPublicIpOnLaunch: True
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref 'AWS::Region'
+      VpcId: !Ref vpc
+      CidrBlock: 10.0.0.0/24
+      Tags:
+        - Key: Name
+          Value: Lab-Pub-a
+  igw:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Lab-igw
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref vpc
+      InternetGatewayId: !Ref igw
+  pubRt:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref vpc
+      Tags:
+        - Key: Name
+          Value:  Lab-public-RT
+  pubRtAssocA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref pubSubnetA
+      RouteTableId: !Ref pubRt
+  igwRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref pubRt
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref igw
+  
+  #Polly Notes API
+  pollyNotesAPIBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+            AllowedOrigins:
+              - '*'
+  
+  #Code Repositories
+  apiRepo:
+    Type: AWS::CodeCommit::Repository
+    Properties:
+      RepositoryDescription: Polly Notes API SAM application
+      RepositoryName: api
+      Code:
+        S3:
+          Bucket: !Sub ${AWS::Region}${S3ResourceBucket}
+          Key: !Sub ${S3PathPrefix}/scripts/api.zip
+  
+  #Cloud9 Environment
+  Cloud9:
+    Type: 'AWS::Cloud9::EnvironmentEC2'
+    DependsOn: pubRtAssocA
+    Properties:
+      InstanceType: t2.micro
+      ImageId: resolve:ssm:/aws/service/cloud9/amis/amazonlinux-2-x86_64
+      SubnetId: !Ref pubSubnetA
+      OwnerArn: !Sub 'arn:aws:iam::${AWS::AccountId}:user/awsstudent'
+      Repositories:
+        - PathComponent: api
+          RepositoryUrl: !GetAtt apiRepo.CloneUrlHttp
+
+  #Functions
+  lambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lambdaPollyRole
+      Path: /
+      Policies:
+        - PolicyName: "pollyAPI"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "dynamodb:DeleteItem"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:GetItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:DescribeTable"
+                  - "polly:SynthesizeSpeech"
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+
+  #DynamoDB Table
+  pollyNotesTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      KeySchema:
+        - KeyType: HASH
+          AttributeName: UserId
+        - KeyType: RANGE
+          AttributeName: NoteId
+      TableName: Notes
+      AttributeDefinitions:
+        - AttributeName: UserId
+          AttributeType: S
+        - AttributeName: NoteId
+          AttributeType: N
+      BillingMode: PAY_PER_REQUEST
+  
+  createRecordsFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Description: This Lambda function creates sample DynamoDB items.
+      Code:
+        ZipFile: |
+          import boto3, json
+          import cfnresponse
+          
+          dynamodb = boto3.resource('dynamodb')
+
+          def handler(event, context):
+            try:
+              print(event);
+              table_name = event['ResourceProperties']['tableName'];
+              if event["RequestType"] == 'Create':
+                table = dynamodb.Table(table_name)
+                with table.batch_writer() as batch:
+                  batch.put_item(
+                    Item={
+                        'UserId': 'testuser',
+                        'NoteId': 1,
+                        'Note': 'hello world'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'testuser',
+                        'NoteId': 2,
+                        'Note': 'this is my first note'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'newbie',
+                        'NoteId': 1,
+                        'Note': 'Free swag code: 1234'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'newbie',
+                        'NoteId': 2,
+                        'Note': 'I love DynamoDB'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student',
+                        'NoteId': 1,
+                        'Note': 'DynamoDB is NoSQL'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student',
+                        'NoteId': 2,
+                        'Note': 'A DynamoDB table is schemaless'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student2',
+                        'NoteId': 3,
+                        'Note': 'PartiQL is a SQL compatible language for DynamoDB'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student2',
+                        'NoteId': 4,
+                        'Note': 'I love DyDB'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student2',
+                        'NoteId': 5,
+                        'Note': 'Maximum size of an item is ____ KB ?'
+                    }
+                  )
+                
+                msg = "Created records in the table: " + table_name
+                responseData = {}
+                responseData['Data'] = msg
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, event["LogicalResourceId"]);
+              else:
+                msg = "No work to do"
+                responseData = {}
+                responseData['Data'] = msg
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, event["LogicalResourceId"]);
+            except Exception as e:
+              msg = f"Exception raised for function: Exception details: {e}"
+              responseData = {}
+              responseData['Data'] = msg
+              cfnresponse.send(event, context, cfnresponse.FAILED, responseData, event["LogicalResourceId"]);
+              
+      Handler: index.handler
+      Role: !GetAtt 'serviceRole.Arn'
+      Runtime: python3.7
+      Timeout: 500
+      
+  serviceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: !Sub lambdaLogsCreatePolicy-${AWS::StackName}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+        - PolicyName: !Sub lambdaLogPolicy-${AWS::StackName}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*
+        - PolicyName: lambdaDDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:BatchWriteItem
+                Resource: 
+                  - !GetAtt pollyNotesTable.Arn
+                  
+  #Custom bucket maintenance function.
+  invokeLambda:
+    Type: Custom::BucketMaintenance
+    Version: "1.0"
+    Properties:
+      ServiceToken: !GetAtt createRecordsFunction.Arn
+      tableName: !Ref pollyNotesTable
+
+  ##QL ReadOnly Group and awsStudent membership
+  ReadOnlyGroup:
+      Type: AWS::IAM::Group
+      Properties:
+        GroupName: QLReadOnly
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/ReadOnlyAccess
+  GroupAssignment:
+      Type: AWS::IAM::UserToGroupAddition
+      DependsOn: ReadOnlyGroup
+      Properties:
+        GroupName: QLReadOnly
+        Users:
+          - awsstudent

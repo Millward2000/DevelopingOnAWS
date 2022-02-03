@@ -1,0 +1,11 @@
+[
+  {"UserId": "testuser","NoteId": "001", "Note": "hello"},
+  {"UserId": "testuser","NoteId": "002", "Note": "this is my first note"},
+  {"UserId": "newbie","NoteId": "001", "Note": "Free swag code: 1234"},
+  {"UserId": "newbie","NoteId": "002", "Note": "I love DynamoDB"},
+  {"UserId": "student","NoteId": "001", "Note": "DynamoDB is NoSQL"},
+  {"UserId": "student","NoteId": "002", "Note": "A DynamoDB table is schemaless"},
+  {"UserId": "student","NoteId": "003", "Note": "PartiQL is a SQL compatible language for DynamoDB"},
+  {"UserId": "student","NoteId": "005", "Note": "Maximum size of an item is ____ KB ?"},
+  {"UserId": "student","NoteId": "004", "Note": "I love DynamoDB"}
+]

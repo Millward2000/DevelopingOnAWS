@@ -1,0 +1,323 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Developing on AWS - Lab 5 - Develop Solutions Using Amazon API Gateway
+
+Parameters:
+  S3PathPrefix:
+    Type: String
+    Description: 'The path prefix where lab resources are stored'
+    Default: 'courses/ILT-TF-200-DODEVA/v4.0.0/lab-5'
+  S3ResourceBucket:
+    Type: String
+    Description: 'S3 Bucket suffix (e.g. us-west-2-tcprod) of where to pull lab resources from'
+    Default: '-tcprod'
+  lambdaRuntime:
+    Type: String
+    Default: python3.9
+  lambdaHandler:
+    Type: String
+    Default: app.lambda_handler
+
+Resources:
+  # Polly Notes API Bucket
+  pollyNotesAPIBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+            AllowedOrigins:
+              - '*'
+  
+  #Functions
+  listFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: list-function
+      Handler: !Ref lambdaHandler
+      Role: !GetAtt lambdaRole.Arn
+      Runtime: !Ref lambdaRuntime
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref pollyNotesTable
+      Code:
+        S3Bucket: !Sub ${AWS::Region}${S3ResourceBucket}
+        S3Key: !Sub ${S3PathPrefix}/scripts/list-function.zip
+
+  createUpdateFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: createUpdate-function
+      Handler: !Ref lambdaHandler
+      Role: !GetAtt lambdaRole.Arn
+      Runtime: !Ref lambdaRuntime
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref pollyNotesTable
+      Code:
+        S3Bucket: !Sub ${AWS::Region}${S3ResourceBucket}
+        S3Key: !Sub ${S3PathPrefix}/scripts/createUpdate-function.zip
+
+  deleteFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: delete-function
+      Handler: !Ref lambdaHandler
+      Role: !GetAtt lambdaRole.Arn
+      Runtime: !Ref lambdaRuntime
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref pollyNotesTable
+      Code:
+        S3Bucket: !Sub ${AWS::Region}${S3ResourceBucket}
+        S3Key: !Sub ${S3PathPrefix}/scripts/delete-function.zip
+
+  dictateFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: dictate-function
+      Handler: !Ref lambdaHandler
+      Role: !GetAtt lambdaRole.Arn
+      Runtime: !Ref lambdaRuntime
+      Environment:
+        Variables:
+          MP3_BUCKET_NAME: !Ref pollyNotesAPIBucket
+          TABLE_NAME: !Ref pollyNotesTable
+      Code:
+        S3Bucket: !Sub ${AWS::Region}${S3ResourceBucket}
+        S3Key: !Sub ${S3PathPrefix}/scripts/dictate-function.zip
+
+  searchFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: search-function
+      Handler: !Ref lambdaHandler
+      Role: !GetAtt lambdaRole.Arn
+      Runtime: !Ref lambdaRuntime
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref pollyNotesTable
+      Code:
+        S3Bucket: !Sub ${AWS::Region}${S3ResourceBucket}
+        S3Key: !Sub ${S3PathPrefix}/scripts/search-function.zip
+
+  lambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      Policies:
+        - PolicyName: "pollyAPI"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "dynamodb:DeleteItem"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:GetItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:DescribeTable"
+                  - "polly:SynthesizeSpeech"
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+
+  #DynamoDB Table
+  pollyNotesTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      KeySchema:
+        - KeyType: HASH
+          AttributeName: UserId
+        - KeyType: RANGE
+          AttributeName: NoteId
+      TableName: Notes
+      AttributeDefinitions:
+        - AttributeName: UserId
+          AttributeType: S
+        - AttributeName: NoteId
+          AttributeType: N
+      BillingMode: PAY_PER_REQUEST
+      
+  createRecordsFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Description: This Lambda function creates folder in S3 bucket.
+      Code:
+        ZipFile: |
+          import boto3, json
+          import cfnresponse
+          
+          dynamodb = boto3.resource('dynamodb')
+
+          def handler(event, context):
+            try:
+              print(event);
+              table_name = event['ResourceProperties']['tableName'];
+              if event["RequestType"] == 'Create':
+                table = dynamodb.Table(table_name)
+                with table.batch_writer() as batch:
+                  batch.put_item(
+                    Item={
+                        'UserId': 'testuser',
+                        'NoteId': 1,
+                        'Note': 'hello world'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'testuser',
+                        'NoteId': 2,
+                        'Note': 'this is my first note'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'newbie',
+                        'NoteId': 1,
+                        'Note': 'Free swag code: 1234'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'newbie',
+                        'NoteId': 2,
+                        'Note': 'I love DynamoDB'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student',
+                        'NoteId': 1,
+                        'Note': 'DynamoDB is NoSQL'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student',
+                        'NoteId': 2,
+                        'Note': 'A DynamoDB table is schemaless'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student2',
+                        'NoteId': 3,
+                        'Note': 'PartiQL is a SQL compatible language for DynamoDB'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student2',
+                        'NoteId': 4,
+                        'Note': 'I love DyDB'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student2',
+                        'NoteId': 5,
+                        'Note': 'Maximum size of an item is ____ KB ?'
+                    }
+                  )
+                
+                msg = "Created records in the table: " + table_name
+                responseData = {}
+                responseData['Data'] = msg
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, event["LogicalResourceId"]);
+              else:
+                msg = "No work to do"
+                responseData = {}
+                responseData['Data'] = msg
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, event["LogicalResourceId"]);
+            except Exception as e:
+              msg = f"Exception raised for function: Exception details: {e}"
+              responseData = {}
+              responseData['Data'] = msg
+              cfnresponse.send(event, context, cfnresponse.FAILED, responseData, event["LogicalResourceId"]);
+              
+      Handler: index.handler
+      Role: !GetAtt 'LambdaExecutionRole.Arn'
+      Runtime: python3.7
+      Timeout: 500
+      
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: !Sub lambdaLogsCreatePolicy-${AWS::StackName}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+        - PolicyName: !Sub lambdaLogPolicy-${AWS::StackName}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*
+        - PolicyName: lambdaDDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:BatchWriteItem
+                Resource: 
+                  - !GetAtt pollyNotesTable.Arn
+                  
+  #Custom bucket maintenance function.
+  invokeLambda:
+    Type: Custom::BucketMaintenance
+    Version: "1.0"
+    Properties:
+      ServiceToken: !GetAtt createRecordsFunction.Arn
+      tableName: !Ref pollyNotesTable
+
+  ##QL ReadOnly Group and awsStudent membership
+  ReadOnlyGroup:
+      Type: AWS::IAM::Group
+      Properties:
+        GroupName: QLReadOnly
+        ManagedPolicyArns:
+          - arn:aws:iam::aws:policy/ReadOnlyAccess
+  GroupAssignment:
+      Type: AWS::IAM::UserToGroupAddition
+      DependsOn: ReadOnlyGroup
+      Properties:
+        GroupName: QLReadOnly
+        Users:
+          - awsstudent

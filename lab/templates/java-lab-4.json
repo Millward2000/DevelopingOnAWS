@@ -1,0 +1,434 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'Developing on AWS - Lab 4 - Develop Solutions Using AWS Lambda'
+
+Parameters:
+  AdministratorPassword:
+    Type: String
+
+  S3PathPrefix:
+    Type: String
+    Description: 'The path prefix where lab resources are stored'
+    Default: 'courses/ILT-TF-200-DODEVA/v4.0.0/lab-4-java'
+  S3ResourceBucket:
+    Type: String
+    Description: 'S3 Bucket suffix (e.g. us-west-2-tcprod) of where to pull lab resources from'
+    Default: '-tcprod'
+
+
+
+Resources:
+
+  # Lab Networking Components Start
+  LabVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: Lab VPC
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref LabVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    DependsOn: AttachGateway
+    Properties:
+      VpcId: !Ref LabVPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs
+      Tags:
+        - Key: Name
+          Value: Public Subnet
+  
+  PublicSubnet2:
+    Type: "AWS::EC2::Subnet"
+    DependsOn: AttachGateway
+    Properties:
+      VpcId: !Ref LabVPC
+      CidrBlock: 10.0.15.0/24
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs
+      Tags:
+        - Key: Name
+          Value: Public Subnet 2
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    DependsOn: PublicSubnet
+    Properties:
+      VpcId: !Ref LabVPC
+      Tags:
+        - Key: Name
+          Value: Public Route Table
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+  # Lab Networking Component END
+
+  ## Windows Instance with Java IDE
+  WindowsInstance:
+    DependsOn: PublicSubnetRouteTableAssociation
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub http://${AWS::Region}${S3ResourceBucket}.s3.${AWS::Region}.amazonaws.com/${S3PathPrefix}/scripts/ide.template
+      Parameters:
+        VPC: !Ref LabVPC
+        PublicSubnetId: !Ref PublicSubnet
+        DefaultProfileAccessKey: !Ref AWSAccessKeyLabStudent
+        DefaultProfileSecret: !GetAtt AWSAccessKeyLabStudent.SecretAccessKey
+        DeveloperProfileAccessKey: !Ref AWSAccessKeyLabDeveloper
+        DeveloperProfileSecret: !GetAtt AWSAccessKeyLabDeveloper.SecretAccessKey
+        AdministratorPassword: !Ref AdministratorPassword
+        IDE: java
+
+  # Creates group for the ReadOnlyAccess policy
+  ReadOnlyGroup:
+    Type: AWS::IAM::Group
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+
+  # Assigns the group to the awsstudent user
+  GroupAssignment:
+    Type: AWS::IAM::UserToGroupAddition
+    Properties:
+      GroupName: !Ref ReadOnlyGroup
+      Users:
+        - awsstudent
+
+  LabStudent:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: LabStudent
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+        - !Ref StudentLabPolicy
+
+  LabDeveloper:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: LabDeveloper
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+        - !Ref DeveloperLabPolicy
+
+  StudentLabPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - s3:CreateBucket
+              - s3:PutBucketOwnershipControls
+              - s3:Describe*
+              - s3:Get*
+              - s3:List*
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - lambda:CreateFunction
+              - lambda:InvokeFunction
+              - lambda:UpdateFunctionConfiguration
+              - lambda:UpdateFunctionCode
+              - lambda:DeleteFunction
+            Effect: Allow
+            Resource: "*"
+          - Action:
+              - iam:PassRole
+            Effect: Allow
+            Resource: arn:aws:iam::*:role/lambdaPollyRole
+  
+  DeveloperLabPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - s3:CreateBucket
+              - s3:PutBucketOwnershipControls
+              - s3:Describe*
+              - s3:Get*
+              - s3:List*
+              - s3:PutObject
+              - s3:PutObjectAcl
+              - lambda:CreateFunction
+              - lambda:InvokeFunction
+              - lambda:UpdateFunctionConfiguration
+              - lambda:UpdateFunctionCode
+              - lambda:DeleteFunction
+            Effect: Allow
+            Resource: "*"
+  
+  AWSAccessKeyLabStudent:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      Status: Active
+      UserName: !Ref LabStudent
+
+  AWSAccessKeyLabDeveloper:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      Status: Active
+      UserName: !Ref LabDeveloper
+
+  #Functions
+  lambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: lambdaPollyRole
+      Path: /
+      Policies:
+        - PolicyName: "pollyAPI"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "dynamodb:DeleteItem"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:GetItem"
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+                  - "dynamodb:UpdateItem"
+                  - "dynamodb:DescribeTable"
+                  - "polly:SynthesizeSpeech"
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                Resource: "*"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  
+  #Polly Notes API
+  pollyNotesAPIBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - GET
+            AllowedOrigins:
+              - '*'
+  
+
+  #DynamoDB Table
+  pollyNotesTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      KeySchema:
+        - KeyType: HASH
+          AttributeName: UserId
+        - KeyType: RANGE
+          AttributeName: NoteId
+      TableName: Notes
+      AttributeDefinitions:
+        - AttributeName: UserId
+          AttributeType: S
+        - AttributeName: NoteId
+          AttributeType: N
+      BillingMode: PAY_PER_REQUEST
+  
+  createRecordsFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Description: This Lambda function creates sample DynamoDB items.
+      Code:
+        ZipFile: |
+          import boto3, json
+          import cfnresponse
+          
+          dynamodb = boto3.resource('dynamodb')
+
+          def handler(event, context):
+            try:
+              print(event);
+              table_name = event['ResourceProperties']['tableName'];
+              if event["RequestType"] == 'Create':
+                table = dynamodb.Table(table_name)
+                with table.batch_writer() as batch:
+                  batch.put_item(
+                    Item={
+                        'UserId': 'testuser',
+                        'NoteId': 1,
+                        'Note': 'hello world'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'testuser',
+                        'NoteId': 2,
+                        'Note': 'this is my first note'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'newbie',
+                        'NoteId': 1,
+                        'Note': 'Free swag code: 1234'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'newbie',
+                        'NoteId': 2,
+                        'Note': 'I love DynamoDB'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student',
+                        'NoteId': 1,
+                        'Note': 'DynamoDB is NoSQL'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student',
+                        'NoteId': 2,
+                        'Note': 'A DynamoDB table is schemaless'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student2',
+                        'NoteId': 3,
+                        'Note': 'PartiQL is a SQL compatible language for DynamoDB'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student2',
+                        'NoteId': 4,
+                        'Note': 'I love DyDB'
+                    }
+                  )
+                  batch.put_item(
+                    Item={
+                        'UserId': 'student2',
+                        'NoteId': 5,
+                        'Note': 'Maximum size of an item is ____ KB ?'
+                    }
+                  )
+                
+                msg = "Created records in the table: " + table_name
+                responseData = {}
+                responseData['Data'] = msg
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, event["LogicalResourceId"]);
+              else:
+                msg = "No work to do"
+                responseData = {}
+                responseData['Data'] = msg
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, event["LogicalResourceId"]);
+            except Exception as e:
+              msg = f"Exception raised for function: Exception details: {e}"
+              responseData = {}
+              responseData['Data'] = msg
+              cfnresponse.send(event, context, cfnresponse.FAILED, responseData, event["LogicalResourceId"]);
+              
+      Handler: index.handler
+      Role: !GetAtt 'serviceRole.Arn'
+      Runtime: python3.7
+      Timeout: 500
+      
+  serviceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: !Sub lambdaLogsCreatePolicy-${AWS::StackName}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*
+        - PolicyName: !Sub lambdaLogPolicy-${AWS::StackName}
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*
+        - PolicyName: lambdaDDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:BatchWriteItem
+                Resource: 
+                  - !GetAtt pollyNotesTable.Arn
+                  
+  #Custom bucket maintenance function.
+  invokeLambda:
+    Type: Custom::BucketMaintenance
+    Version: "1.0"
+    Properties:
+      ServiceToken: !GetAtt createRecordsFunction.Arn
+      tableName: !Ref pollyNotesTable
+  
+Outputs:
+  Region:
+    Description: "Region the lab is running in"
+    Value: !Sub ${AWS::Region}
+
+  AdministratorPassword:
+    Value: !Ref AdministratorPassword
+  
+  MP3BucketName:
+    Value: !Ref pollyNotesAPIBucket
+
+  GuacamoleLink:
+    Value: !GetAtt WindowsInstance.Outputs.GuacamoleLink
+
+  WindowsInstanceIP:
+    Value: !GetAtt WindowsInstance.Outputs.PublicIp

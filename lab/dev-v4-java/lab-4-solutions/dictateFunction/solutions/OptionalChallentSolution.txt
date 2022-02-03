@@ -1,0 +1,107 @@
+
+***********************************************************************************
+|                                                                                 |
+|   This file provides details to create the remaining Java Lambda functions and  |
+|   the test event details to use when testing in the Lambda console.             |
+|                                                                                 |
+***********************************************************************************
+
+
+createUpdateFunction:
+
+- jar file: createupdateFunction.jar
+- Handler name: createUpdate.Handler
+
+- CLI Command to create function:
+
+aws lambda create-function --function-name createUpdateFunction ^
+--handler createupdate.Handler ^
+--runtime java11 ^
+--memory 300 ^
+--timeout 60 ^
+--role "%roleArn%" ^
+--environment Variables="{TABLE_NAME=Notes}" ^
+--zip-file fileb://createupdateFunction.jar
+
+- Test Event:
+
+{
+"UserId": "newbie",
+"NoteId": "2",
+"VoiceId": "Joey",
+"Note": "This is my new note from Lab 4"
+}
+
+------------------------------------------------------------------------------
+
+listFunction:
+
+- jar file: listFunction.jar
+- Handler name: list.Handler
+
+- CLI Command to create function:
+
+aws lambda create-function --function-name listFunction ^
+--handler list.Handler ^
+--runtime java11 ^
+--memory 300 ^
+--timeout 60 ^
+--role "%roleArn%" ^
+--environment Variables="{TABLE_NAME=Notes}" ^
+--zip-file fileb://listFunction.jar
+
+- Test Event:
+
+{
+"UserId": "newbie"
+}
+
+------------------------------------------------------------------------------
+
+searchFunction:
+
+- jar file: searchFunction.jar
+- Handler name: search.Handler
+
+- CLI Command to create function:
+
+aws lambda create-function --function-name searchFunction ^
+--handler search.Handler ^
+--runtime java11 ^
+--memory 300 ^
+--timeout 60 ^
+--role "%roleArn%" ^
+--environment Variables="{TABLE_NAME=Notes}" ^
+--zip-file fileb://searchFunction.jar
+
+- Test Event:
+
+{
+"UserId": "newbie",
+"text": "note"
+}
+
+------------------------------------------------------------------------------
+
+deleteFunction:
+
+- jar file: deleteFunction.jar
+- Handler name: delete.Handler
+
+- CLI Command to create function:
+
+aws lambda create-function --function-name deleteFunction ^
+--handler delete.Handler ^
+--runtime java11 ^
+--memory 300 ^
+--timeout 60 ^
+--role "%roleArn%" ^
+--environment Variables="{TABLE_NAME=Notes}" ^
+--zip-file fileb://deleteFunction.jar
+
+- Test Event:
+
+{
+"UserId": "newbie",
+"NoteId": "3"
+}

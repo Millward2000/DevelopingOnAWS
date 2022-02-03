@@ -1,0 +1,27 @@
+{
+    "IndexDocument": {
+        "Suffix": "index.html"
+    },
+    "ErrorDocument": {
+        "Key": "error.html"
+    },
+"RedirectAllRequestsTo": {
+  "HostName": "string",
+  "Protocol": "http"|"https"
+},
+"RoutingRules": [
+  {
+    "Condition": {
+      "HttpErrorCodeReturnedEquals": "string",
+      "KeyPrefixEquals": "string"
+    },
+    "Redirect": {
+      "HostName": "string",
+      "HttpRedirectCode": "string",
+      "Protocol": "http"|"https",
+      "ReplaceKeyPrefixWith": "string",
+      "ReplaceKeyWith": "string"
+    }
+  }
+]
+}

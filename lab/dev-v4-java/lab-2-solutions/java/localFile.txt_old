@@ -1,0 +1,10 @@
+UserId,NoteId,Notes
+testuser,001,hello
+testuser,002,this is my first note
+student,001,DynamoDB is NoSQL
+student,002,A DynamoDB table is schemaless
+student,003,PartQL is a SQL compatible language for DynamoDB
+student,004,I love DyDB
+student,005,Maximum size of an item is ____ KB ?
+newbie,001,Free swag code: 1234
+newbie,002,I love DynamoDB

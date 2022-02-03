@@ -1,0 +1,6 @@
+dev\labs\s3\CreateBucket2.class
+dev\labs\s3\hostS3Website.class
+dev\labs\s3\uploadObject.class
+dev\labs\s3\CreateBucket1.class
+dev\labs\s3\createBucket.class
+dev\labs\s3\processObject.class

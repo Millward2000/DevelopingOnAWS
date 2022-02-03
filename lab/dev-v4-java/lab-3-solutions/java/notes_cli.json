@@ -1,0 +1,9 @@
+{"Item":{"NoteId":{"N":"3"},"UserId":{"S":"student"},"Notes":{"S":"PartiQL is a SQL compatible language for DynamoDB"}}}
+{"Item":{"NoteId":{"N":"5"},"UserId":{"S":"student"},"Notes":{"S":"maximum item size in DynamoDB is 400 KB"},"Is_Incomplete":{"S":"No"}}}
+{"Item":{"NoteId":{"N":"4"},"UserId":{"S":"student"},"Notes":{"S":"I love DyDB"}}}
+{"Item":{"NoteId":{"N":"2"},"UserId":{"S":"testuser"},"Notes":{"S":"this is my first note"}}}
+{"Item":{"NoteId":{"N":"1"},"UserId":{"S":"student"},"Notes":{"S":"DynamoDB is NoSQL"}}}
+{"Item":{"NoteId":{"N":"2"},"UserId":{"S":"newbie"},"Notes":{"S":"I love DynamoDB"}}}
+{"Item":{"NoteId":{"N":"2"},"UserId":{"S":"student"},"Notes":{"S":"A DynamoDB table is schemaless"}}}
+{"Item":{"NoteId":{"N":"1"},"UserId":{"S":"newbie"},"Notes":{"S":"Free swag code: 1234"}}}
+{"Item":{"NoteId":{"N":"1"},"UserId":{"S":"testuser"},"Notes":{"S":"hello"}}}

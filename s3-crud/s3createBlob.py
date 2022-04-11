@@ -21,4 +21,4 @@ def upload_to_aws(local_file, bucket, key):
         print("The file was not found")
         return False
 
-upload_to_aws('/home/matt/aai/arch/s3-demo/mpu/test32.txt', 'millwam-crud-bucket','blob.obj')
+upload_to_aws('/home/matt/aai/dev/demo/s3-crud/mcu.csv', 'millwam-crud-bucket','mcu.csv')

@@ -10,7 +10,7 @@ client = boto3.client("s3", config=my_config)
 response = client.select_object_content(
     Bucket='millwam-crud-bucket',
     Key='mcu.csv',
-    Expression="select s._2, s._3 from s3object s where s._2 = 'STEVE ROGERS'",
+    Expression="select s._2, s._3 from s3object s where s._4 = 'Avengers: Endgame'",
     ExpressionType='SQL',
     InputSerialization={
         'CSV': {
@@ -22,6 +22,7 @@ response = client.select_object_content(
     },
     OutputSerialization={
         'CSV': {
+            'FieldDelimiter': ':'
         }
     }
     )
